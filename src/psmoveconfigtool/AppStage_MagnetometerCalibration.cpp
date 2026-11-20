@@ -1,5 +1,6 @@
 //-- inludes -----
 #include "AppStage_MagnetometerCalibration.h"
+#include <chrono>
 #include "AppStage_ControllerSettings.h"
 #include "AppStage_MainMenu.h"
 #include "App.h"

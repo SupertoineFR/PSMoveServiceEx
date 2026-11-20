@@ -1,5 +1,6 @@
 //-- inludes -----
 #include "AppStage_OpticalRecenter.h"
+#include <chrono>
 #include "AppStage_ComputeTrackerPoses.h"
 #include "AppStage_TrackerSettings.h"
 #include "AppStage_MainMenu.h"

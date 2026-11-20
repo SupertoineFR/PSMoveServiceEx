@@ -434,7 +434,7 @@ public:
 					cv::Point(128, capFrame.rows / 2),
 					cv::FONT_HERSHEY_DUPLEX,
 					1.0,
-					CvScalar(255, 255, 255),
+					cv::Scalar(255, 255, 255),
 					2
 				);
 				m_frameAvailable = true;
@@ -461,7 +461,7 @@ public:
 					cv::Point(128, capFrame.rows / 2),
 					cv::FONT_HERSHEY_DUPLEX,
 					1.0,
-					CvScalar(255, 255, 255),
+					cv::Scalar(255, 255, 255),
 					2
 				);
 				m_frameAvailable = true;
@@ -517,7 +517,7 @@ protected:
     
     bool open(int _index)
     {
-		capFrame = cv::Mat(480, 640, CV_8UC3, CvScalar(0, 0, 0));
+		capFrame = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
 
         // Enumerate libusb devices
         std::vector<ps3eye::PS3EYECam::PS3EYERef> devices = ps3eye::PS3EYECam::getDevices();
@@ -721,7 +721,7 @@ public:
 				cv::Point(64, capFrameSD.rows / 2),
 				cv::FONT_HERSHEY_DUPLEX,
 				1.0,
-				CvScalar(255, 255, 255),
+				cv::Scalar(255, 255, 255),
 				2
 			);
 
@@ -765,7 +765,7 @@ public:
 				cv::Point(64, capFrameSD.rows / 2),
 				cv::FONT_HERSHEY_DUPLEX,
 				1.0,
-				CvScalar(255, 255, 255),
+				cv::Scalar(255, 255, 255),
 				2
 			);
 
@@ -820,7 +820,7 @@ public:
 					cv::Point(64, capFrameSD.rows / 2),
 					cv::FONT_HERSHEY_DUPLEX,
 					1.0,
-					CvScalar(255, 255, 255),
+					cv::Scalar(255, 255, 255),
 					2
 				);
 
@@ -857,7 +857,7 @@ public:
 				cv::Point(256, capFrameHD.rows / 2),
 				cv::FONT_HERSHEY_DUPLEX,
 				3.0,
-				CvScalar(255, 255, 255),
+				cv::Scalar(255, 255, 255),
 				5
 			);
 
@@ -902,7 +902,7 @@ public:
 				cv::Point(256, capFrameHD.rows / 2),
 				cv::FONT_HERSHEY_DUPLEX,
 				3.0,
-				CvScalar(255, 255, 255),
+				cv::Scalar(255, 255, 255),
 				5
 			);
 
@@ -959,7 +959,7 @@ public:
 					cv::Point(256, capFrameHD.rows / 2),
 					cv::FONT_HERSHEY_DUPLEX,
 					3.0,
-					CvScalar(255, 255, 255),
+					cv::Scalar(255, 255, 255),
 					5
 				);
 
@@ -1061,8 +1061,8 @@ protected:
 	bool open(int _index)
 	{
 		m_index = _index;
-		capFrameSD = cv::Mat(480, 640, CV_8UC3, CvScalar(0, 0, 0));
-		capFrameHD = cv::Mat(1080, 1920, CV_8UC3, CvScalar(0, 0, 0));
+		capFrameSD = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
+		capFrameHD = cv::Mat(1080, 1920, CV_8UC3, cv::Scalar(0, 0, 0));
 
 #ifdef SERVER_LOG_H
 		SERVER_LOG_INFO("ps3eye::VIRTUAL()") << "Index " << m_index << " open.";

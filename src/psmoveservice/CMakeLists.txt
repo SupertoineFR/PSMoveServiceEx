@@ -167,7 +167,7 @@ list(APPEND PSMOVE_SERVICE_INCL_DIRS ${PROTOBUF_INCLUDE_DIRS})
 list(APPEND PSMOVE_SERVICE_REQ_LIBS ${PROTOBUF_LIBRARIES})
 
 # Boost. TODO: Trim this list.
-find_package(Boost REQUIRED QUIET COMPONENTS atomic chrono filesystem program_options system thread)
+find_package(Boost REQUIRED QUIET COMPONENTS atomic chrono filesystem program_options thread)
 list(APPEND PSMOVE_SERVICE_INCL_DIRS ${Boost_INCLUDE_DIRS})
 list(APPEND PSMOVE_SERVICE_REQ_LIBS ${Boost_LIBRARIES})
 

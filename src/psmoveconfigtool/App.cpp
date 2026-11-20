@@ -1,5 +1,6 @@
 //-- includes -----
 #include "App.h"
+#include <chrono>
 #include "AppStage.h"
 #include "AssetManager.h"
 #include "Renderer.h"

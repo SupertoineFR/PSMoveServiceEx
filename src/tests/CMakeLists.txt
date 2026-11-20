@@ -143,7 +143,7 @@ list(APPEND TEST_PSMOVE_SRC ${LIBSTEM_GAMEPAD_SRC})
 
 # Boost
 # TODO: Eliminate boost::filesystem with C++14
-FIND_PACKAGE(Boost REQUIRED QUIET COMPONENTS atomic chrono filesystem program_options system thread)
+FIND_PACKAGE(Boost REQUIRED QUIET COMPONENTS atomic chrono filesystem program_options thread)
 list(APPEND TEST_PSMOVE_INCL_DIRS ${Boost_INCLUDE_DIRS})
 list(APPEND TEST_PSMOVE_REQ_LIBS ${Boost_LIBRARIES})
 
@@ -258,7 +258,7 @@ list(APPEND TEST_NAVI_SRC ${LIBSTEM_GAMEPAD_SRC})
 
 # Boost
 # TODO: Eliminate boost::filesystem with C++14
-FIND_PACKAGE(Boost REQUIRED QUIET COMPONENTS atomic chrono filesystem program_options system thread)
+FIND_PACKAGE(Boost REQUIRED QUIET COMPONENTS atomic chrono filesystem program_options thread)
 list(APPEND TEST_NAVI_INCL_DIRS ${Boost_INCLUDE_DIRS})
 list(APPEND TEST_NAVI_REQ_LIBS ${Boost_LIBRARIES})
 
@@ -382,7 +382,7 @@ list(APPEND TEST_DS4_CTRLR_SRC ${LIBSTEM_GAMEPAD_SRC})
 
 # Boost
 # TODO: Eliminate boost::filesystem with C++14
-FIND_PACKAGE(Boost REQUIRED QUIET COMPONENTS atomic chrono filesystem program_options system thread)
+FIND_PACKAGE(Boost REQUIRED QUIET COMPONENTS atomic chrono filesystem program_options thread)
 list(APPEND TEST_DS4_CTRLR_INCL_DIRS ${Boost_INCLUDE_DIRS})
 list(APPEND TEST_DS4_CTRLR_REQ_LIBS ${Boost_LIBRARIES})
 

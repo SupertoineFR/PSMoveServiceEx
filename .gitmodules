@@ -6,18 +6,19 @@
 	url = https://github.com/signal11/hidapi.git
 [submodule "thirdparty/PS3EYEDriver"]
 	path = thirdparty/PS3EYEDriver
-	url = https://github.com/zelmon64/PS3EYEDriver.git
-	branch = set_resolution
+	url = https://github.com/SupertoineFR/PS3EYEDriver.git
+	branch = psmoveservicex-compat
 [submodule "thirdparty/type_index"]
 	path = thirdparty/type_index
 	url = https://github.com/boostorg/type_index.git
 [submodule "thirdparty/Boost.Application"]
 	path = thirdparty/Boost.Application
-	url = https://github.com/retf/Boost.Application.git
-	branch = 4.8
+	url = https://github.com/SupertoineFR/Boost.Application.git
+	branch = psmoveservicex-compat
 [submodule "thirdparty/protobuf"]
 	path = thirdparty/protobuf
-	url = https://github.com/google/protobuf.git
+	url = https://github.com/SupertoineFR/protobuf.git
+	branch = psmoveservicex-compat
 [submodule "thirdparty/imgui"]
 	path = thirdparty/imgui
 	url = https://github.com/ocornut/imgui.git
@@ -35,7 +36,8 @@
 	url = https://github.com/mherb/kalman.git
 [submodule "thirdparty/libstem_gamepad"]
 	path = thirdparty/libstem_gamepad
-	url = https://github.com/cboulay/libstem_gamepad.git
+	url = https://github.com/SupertoineFR/libstem_gamepad.git
+	branch = psmoveservicex-compat
 [submodule "thirdparty/lockfreequeue"]
 	path = thirdparty/lockfreequeue
 	url = https://github.com/cameron314/readerwriterqueue.git

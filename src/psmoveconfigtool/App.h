@@ -9,6 +9,7 @@
 #include "Camera.h"
 
 #include <map>
+#include <string>
 #include <utility> // std::pair
 
 //-- definitions -----

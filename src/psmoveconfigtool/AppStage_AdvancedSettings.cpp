@@ -11,6 +11,7 @@
 #include "SDL_keycode.h"
 
 #include <imgui.h>
+#include "ImGuiButtonChecked.h"
 
 #include <boost/filesystem.hpp>
 #include <boost/property_tree/ptree.hpp>

@@ -453,7 +453,7 @@ void AppStage_ColorCalibration::update()
 							),
 							cv::FONT_HERSHEY_PLAIN,
 							0.75,
-							CvScalar(0, 255, 255),
+							cv::Scalar(0, 255, 255),
 							1
 						);
 					}

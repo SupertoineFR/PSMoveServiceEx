@@ -2,6 +2,7 @@
 
 //-- includes -----
 #include "AppStage_DistortionCalibration.h"
+#include <chrono>
 #include "AppStage_TrackerSettings.h"
 #include "AppStage_MainMenu.h"
 #include "AssetManager.h"

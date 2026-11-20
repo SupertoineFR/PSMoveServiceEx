@@ -9,6 +9,7 @@
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <thread>
 #include <memory>

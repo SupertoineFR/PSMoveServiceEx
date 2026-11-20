@@ -24,7 +24,7 @@ ELSEIF(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     #hid required for HidD_SetOutputReport() in DualShock4 controller
     #setupapi required by hidapi
     #dinput8 required by libstem_gamepad
-    list(APPEND PLATFORM_LIBS bthprops setupapi hid dinput8)
+    list(APPEND PLATFORM_LIBS bthprops setupapi hid dinput8 winmm)
     IF(MINGW)
         #list(APPEND PLATFORM_LIBS stdc++)
     ENDIF(MINGW)
@@ -55,13 +55,17 @@ ENDIF()
 # Override by adding "-DOpenCV_DIR=C:\path\to\opencv\build" to your cmake command
 IF(NOT OpenCV_DIR)
     IF(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+        # OpenCV 3.4.x is the last line with the legacy C API used by this project
+        set(PSM_OPENCV_GIT_TAG 3.4.20)
+        set(PSM_OPENCV_LIB_SUFFIX 3420)
         ExternalProject_Add(opencv
           PREFIX ${ROOT_DIR}/deps/opencv
           GIT_REPOSITORY https://github.com/opencv/opencv.git
           GIT_SHALLOW 1
-          GIT_TAG 3.1.0
+          GIT_TAG ${PSM_OPENCV_GIT_TAG}
           CMAKE_GENERATOR ${gen}
           CMAKE_ARGS
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
             -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
             -DCMAKE_INCLUDE_PATH=${ROOT_DIR}/deps/local/include
             -DCMAKE_LIBRARY_PATH=${ROOT_DIR}/deps/local/lib
@@ -89,6 +93,14 @@ IF(NOT OpenCV_DIR)
             -DBUILD_opencv_java:BOOL=OFF
             -DBUILD_opencv_python2:BOOL=OFF
             -DBUILD_opencv_python3:BOOL=OFF
+            -DBUILD_opencv_dnn:BOOL=OFF
+            -DBUILD_PROTOBUF:BOOL=OFF
+            -DWITH_PROTOBUF:BOOL=OFF
+            -DWITH_ITT:BOOL=OFF
+            -DWITH_QUIRC:BOOL=OFF
+            -DOpenCV_INSTALL_BINARIES_PREFIX:STRING=
+            -DOPENCV_LIB_INSTALL_PATH:STRING=staticlib
+            -DOPENCV_3P_LIB_INSTALL_PATH:STRING=staticlib
             -DPYTHON2_LIBRARY:STRING=C:/Python27/libs/python27.lib
             -DPYTHON3_LIBRARY:STRING=C:/Python35/libs/python35.lib
           INSTALL_DIR ${ROOT_DIR}/deps/local/
@@ -98,18 +110,14 @@ IF(NOT OpenCV_DIR)
 
         set(OpenCV_DIR ${ROOT_DIR}/deps/local)
         set(OpenCV_INCLUDE_DIRS ${ROOT_DIR}/deps/local/include )
-        if (${CMAKE_C_SIZEOF_DATA_PTR} EQUAL 8)
-            set(OPENCV_LIBS_DIR ${ROOT_DIR}/deps/local/x64/vc14/staticlib)
-        else()
-            set(OPENCV_LIBS_DIR ${ROOT_DIR}/deps/local/x86/vc14/staticlib)
-        endif()
+        set(OPENCV_LIBS_DIR ${ROOT_DIR}/deps/local/staticlib)
 
         foreach(__CVLIB core calib3d features2d flann imgproc imgcodecs ml highgui objdetect video videoio)
-            set(OpenCV_${__CVLIB}_LIBRARY debug ${OPENCV_LIBS_DIR}/opencv_${__CVLIB}310d.lib optimized ${OPENCV_LIBS_DIR}/opencv_${__CVLIB}310.lib CACHE STRING "" FORCE)
+            set(OpenCV_${__CVLIB}_LIBRARY debug ${OPENCV_LIBS_DIR}/opencv_${__CVLIB}${PSM_OPENCV_LIB_SUFFIX}d.lib optimized ${OPENCV_LIBS_DIR}/opencv_${__CVLIB}${PSM_OPENCV_LIB_SUFFIX}.lib CACHE STRING "" FORCE)
             set(OpenCV_LIBS ${OpenCV_LIBS} ${OpenCV_${__CVLIB}_LIBRARY})
         endforeach(__CVLIB)    
 
-        foreach(__CVLIB libjpeg libpng libwebp zlib)
+        foreach(__CVLIB libjpeg-turbo libpng libwebp zlib)
             set(OpenCV_${__CVLIB}_LIBRARY debug ${OPENCV_LIBS_DIR}/${__CVLIB}d.lib optimized ${OPENCV_LIBS_DIR}/${__CVLIB}.lib CACHE STRING "" FORCE)
             set(OpenCV_LIBS ${OpenCV_LIBS} ${OpenCV_${__CVLIB}_LIBRARY})
         endforeach(__CVLIB)     

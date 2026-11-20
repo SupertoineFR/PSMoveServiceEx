@@ -19,6 +19,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
+#include "ImGuiButtonChecked.h"
 
 //-- statics ----
 const char *AppStage_TrackerSettings::APP_STAGE_NAME= "CameraSettings";

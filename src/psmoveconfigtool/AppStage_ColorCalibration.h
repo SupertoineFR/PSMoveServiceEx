@@ -3,6 +3,7 @@
 
 //-- includes -----
 #include "AppStage.h"
+#include <chrono>
 #include "PSMoveClient_CAPI.h"
 
 #include <vector>
