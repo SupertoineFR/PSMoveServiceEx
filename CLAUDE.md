@@ -1,27 +1,46 @@
 # Building PSMoveServiceEx from source (Windows x64)
 
-Toolchain this repo is set up for: **Visual Studio 2026 (v145 / MSVC 14.5x), CMake 4.x, Boost 1.92**.
-The original upstream scripts targeted VS 2015 / Boost 1.6x / OpenCV 3.1; several fixes were needed to build with the modern toolchain (see "Compatibility notes").
+## ⚙️ Prerequisite Checklist
+* **Git** ≥ 2.23 (needed for sub‑module support)
+  5 | * **Visual Studio 2026** (Community or Build Tools) with the **C++ workload** – the helper scripts now reference the 2026 MSBuild and vcvarsall paths.
+* **CMake** 4.x that ships with VS2026 (`C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`)
+  7 | * **Boost** 1.92 pre‑built for MSVC 14.5 (`C:\local\boost_1_92_0` – ensure `BOOST_ROOT` points here)
+* Internet access – OpenCV 3.4.20 is cloned during the first build
+* Optional: **Git‑Bash** or **WSL** for the `rm -rf` commands in the scripts
+
+
+ 12 | Toolchain this repo is set up for: **Visual Studio 2026 (v145 / MSVC 14.5x), CMake 4.x, Boost 1.92**.
+13 | **Note:** The original `build.ps1` bundled with the repo contained syntax errors
+14 | (missing braces, incorrect `foreach` syntax, and an unbalanced block), which caused
+15 | PowerShell to abort before any compilation could begin.  The section below
+16 | provides a corrected, consolidated helper script that works with the current
+17 | toolchain.
+ 13 | The original upstream scripts targeted VS 2015 / Boost 1.6x / OpenCV 3.1; several fixes were required for the modern toolchain. The helper scripts (`InitialSetup_X64.bat`, `GenerateProjectFiles_X64.bat`, `build.ps1`) have been updated to use VS 2026 paths.
 
 ## Prerequisites
-
-- Visual Studio 2026 (Community or Build Tools) with the C++ workload.
-- Use the CMake that ships with VS:
-  `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`
-  The `cmake` on the Git Bash/MSYS PATH has no Visual Studio generators — don't use it.
+ 17 | - Visual Studio 2026 (Community or Build Tools) with the C++ workload.
+ 18 | - Use the CMake that ships with VS:
+   `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`
+   The `cmake` on the Git Bash/MSYS PATH has no Visual Studio generators — don't use it.
+ 19 | - Boost 1.92 prebuilt for msvc-14.5 at `C:\local\boost_1_92_0` (libs in `lib64-msvc-14.5`).
 - Boost 1.92 prebuilt for msvc-14.5 at `C:\local\boost_1_92_0` (libs in `lib64-msvc-14.5`).
 - Git + network access (OpenCV is cloned at build time).
 - Submodules checked out: `git submodule update --init --recursive`
   (warning: this also resets the local submodule patches listed below).
 
-In the commands below, `CMAKE` = the VS cmake.exe path above and
-`MSBUILD` = `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe`.
+ 26 | In the commands below, `CMAKE` = the VS cmake.exe path above and
+ 27 | `MSBUILD` = `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe`.
 
 ## 1. Build third-party dependencies (once)
 
-Equivalent of `InitialSetup_X64.bat`, adapted for VS 2026. Run from the repo root.
+> **NOTE** – Once the `build_thirdparty.bat` finishes, you can skip it on
+> subsequent builds (unless you change the Boost or Protobuf sources).
+> The dependency libraries live under `thirdparty/<lib>/x64/<Debug|Release>/`. They are
+> only rebuilt if you delete the `x64` directory or if the source changes.
 
-**protobuf** (Debug + Release; FindProtobuf expects copies under `x64\<Config>`):
+ 36 | Equivalent of `InitialSetup_X64.bat`, adapted for VS 2026. Run from the repo root.
+
+ 38 | **protobuf** (Debug + Release; FindProtobuf expects copies under `x64\<Config>`):
 ```sh
 cd thirdparty/protobuf && rm -rf vsprojects && mkdir vsprojects && cd vsprojects
 "$CMAKE" -G "Visual Studio 18 2026" -A x64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
@@ -29,24 +48,87 @@ cd thirdparty/protobuf && rm -rf vsprojects && mkdir vsprojects && cd vsprojects
 for c in Debug Release; do "$CMAKE" --build . --config $c -- -m; mkdir -p x64/$c; cp $c/* x64/$c/; done
 ```
 
-**libusb** (Debug + Release):
+ 46 | **libusb** (Debug + Release):
 ```sh
-cd thirdparty/libusb/msvc
-for c in Debug Release; do "$MSBUILD" libusb_2015.sln -p:Configuration=$c -p:Platform=x64 \
-  -p:PlatformToolset=v145 -p:WindowsTargetPlatformVersion=10.0 -m; done
+ 48 | cd thirdparty/libusb/msvc
+ 49 | for c in Debug Release; do "$MSBUILD" libusb_2015.sln -p:Configuration=$c -p:Platform=x64 \
+ 50 |   -p:PlatformToolset=v145 -p:WindowsTargetPlatformVersion=10.0 -m; done
 ```
 
-**SDL2** (static, Release only):
+ 54 | **SDL2** (static, Release only):
 ```sh
 cd thirdparty/SDL2 && rm -rf build && mkdir build && cd build
 "$CMAKE" .. -G "Visual Studio 18 2026" -A x64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -DDIRECTX=OFF -DSDL_STATIC=ON -DFORCE_STATIC_VCRT=ON \
   "-DEXTRA_CFLAGS=-MT -Z7 -DSDL_MAIN_HANDLED -DWIN32 -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -DHAVE_LIBC -D_USE_MATH_DEFINES"
-"$CMAKE" --build . --config Release --target SDL2-static -- -m
+ 60 | "$CMAKE" --build . --config Release --target SDL2main -- -m
 "$CMAKE" --build . --config Release --target SDL2main -- -m
 ```
 
 ## 2. Configure and build PSMoveService
+
+### Build the existing VS 2026 configuration from PowerShell
+
+From the repository root, build only the service target with:
+
+```powershell
+$cmake = "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+& $cmake --build build-vs2026 --config Release --target PSMoveService --parallel 8
+```
+
+The executable is written to `build-vs2026\src\psmoveservice\Release\PSMoveService.exe`.
+To build every configured project instead, omit `--target PSMoveService`.
+
+## Consolidated `build.ps1` helper
+
+You can replace the two separate PowerShell snippets with a single script that
+optionally builds the third‑party dependencies, configures the main project, and
+ 83 | ```powershell
+ 84 | # build.ps1 (consolidated helper)
+ 85 | # -------------------------------
+ 86 | # This script replaces the older, broken build.ps1 that had syntax errors
+ 87 | # (missing braces around foreach loops, incorrect foreach syntax, etc.).
+ 88 | # The current version performs three optional steps:
+ 89 | #   1️⃣  Build third‑party dependencies (protobuf, libusb, SDL2, OpenCV)
+ 90 | #   2️⃣  Configure the main project with CMake
+ 91 | #   3️⃣  Build the requested target(s)
+ 92 | # -----------------------------------------------------------------
+ 93 | param(
+ 94 |     [switch]$Deps,
+ 95 |     [string]$Target = "PSMoveService",   # default to just the service
+ 96 |     [int]$Jobs = 8
+ 97 | )
+ 98 | 
+ 99 | $cmake = "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe"
+100 | 
+101 | # 1️⃣  Build third‑party deps if requested
+102 | if ($Deps) {
+103 |     # Each helper script (e.g. build_thirdparty.bat) expects to be run from the repo root.
+104 |     & .\build_thirdparty.bat
+105 | }
+106 | 
+107 | # 2️⃣  Configure the main project (creates build/)
+108 | & $cmake -S . -B build -G "Visual Studio 18 2026" -A x64 \
+109 |     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DPSM_BUILD_TESTS=OFF \
+110 |     -DBOOST_ROOT="C:/local/boost_1_92_0" \
+111 |     -DBOOST_LIBRARYDIR="C:/local/boost_1_92_0/lib64-msvc-14.5" \
+112 |     -DPROTOBUF_SRC_ROOT_FOLDER=thirdparty/protobuf
+113 | 
+114 | # 3️⃣  Build the requested target(s)
+115 | & $cmake --build build --config Release --target $Target -- -m -v:m -j$Jobs
+116 | ```
+# Build
+& $cmake --build build --config Release --target $Target -- -m -v:m -j$Jobs
+```
+
+Run it with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build.ps1 -Deps   # include deps
+powershell -ExecutionPolicy Bypass -File build.ps1 -Target PSMoveServiceAdmin   # build a different target
+```
+
+The initial configure command below uses `build`; the PowerShell command above uses the separate `build-vs2026` directory so it can coexist with an older or differently configured `build` directory.
 
 ```sh
 "$CMAKE" -S . -B build -G "Visual Studio 18 2026" -A x64 \
@@ -66,6 +148,15 @@ Outputs:
 - `build/src/psmoveclient/Release/PSMoveClient_CAPI.dll`
 
 Find errors quickly: `grep -E "error [A-Z]+[0-9]+" build_release.log | sort -u`
+
+## Troubleshooting
+ 140 | | Symptom | Likely Cause | Fix |
+ 141 | |---------|--------------|-----|
+ 142 | | `CMake Error: The following variables are required but not set: BOOST_ROOT` | Wrong Boost path | Update `BOOST_ROOT` in the `build.ps1` script or set the environment variable `BOOST_ROOT`.
+ 143 | | `error C1083: cannot open include file: 'boost/...` | Wrong library directory | Verify `BOOST_LIBRARYDIR` points to `C:\local\boost_1_92_0\lib64-msvc-14.5`.
+ 144 | | `error LNK2005: duplicate symbol` | Mixing debug/release libs | Ensure you build all components in the same configuration (Debug or Release).
+ 145 | | `error 125: The process cannot access the file because it is being used by another process` | Previous build still running | Close the VS instance or kill the lingering `msbuild.exe` process.
+| `error 125: The process cannot access the file because it is being used by another process` | Previous build still running | Close the VS instance or kill the lingering `msbuild.exe` process.
 
 ## Compatibility notes / gotchas
 

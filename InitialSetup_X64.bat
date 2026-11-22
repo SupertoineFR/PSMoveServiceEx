@@ -23,92 +23,79 @@ if NOT DEFINED BOOST_ROOT_PATH (goto failure)
 :build_thirdparty
 
 :: Write out the paths to a config batch file
-del SetBuildVars_x64.bat
+del SetBuildVars_x64.bat 2>nul
 echo @echo off >> SetBuildVars_x64.bat
 echo set BOOST_ROOT_PATH=%BOOST_ROOT_PATH% >> SetBuildVars_x64.bat
-echo set BOOST_LIB_PATH=%BOOST_ROOT_PATH%/lib64-msvc-14.0 >> SetBuildVars_x64.bat
+echo set BOOST_LIB_PATH=%BOOST_ROOT_PATH%/lib64-msvc-14.5 >> SetBuildVars_x64.bat
 
 :: Add MSVC build tools to the path
-call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" amd64
+call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" amd64
 IF %ERRORLEVEL% NEQ 0 (
-  echo "Unable to initialize 64-bit visual studio build environment"
-  goto failure
+echo "Unable to initialize 64-bit visual studio build environment"
+goto failure
 )
 
-:: Compile the DEBUG|x64 and RELEASE|x64 builds of protobuf
+:: Compile the RELEASE|x64 build of protobuf
 echo "Creating protobuf project files..."
 pushd thirdparty\protobuf
 del /f /s /q vsprojects > nul
 rmdir /s /q vsprojects
 mkdir vsprojects
 pushd vsprojects
-cmake -G "Visual Studio 14 2015 Win64" -Dprotobuf_DEBUG_POSTFIX="" -Dprotobuf_BUILD_TESTS=OFF ../cmake
+set MSBUILD="C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
+set CMAKE="C:\Program Files\CMake\bin\cmake.exe"
+%CMAKE% -G "Visual Studio 18 2026" -A x64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ^
+  -Dprotobuf_DEBUG_POSTFIX="" -Dprotobuf_BUILD_TESTS=OFF ../cmake
 IF %ERRORLEVEL% NEQ 0 (
   echo "Error generating protobuf project files!"
   goto failure
 )
 
-echo "Building protobuf DEBUG|x64"
-MSBuild.exe protobuf.sln /p:configuration=DEBUG /t:Clean;Build 
-IF %ERRORLEVEL% NEQ 0 (
-  echo "Error building protobuf DEBUG|x64!"
-  goto failure
-)
-:: Work around for issue in 64-bit builds, FindProtobuf modules expects files in x64\Debug
-copy Debug\*.* x64\Debug || goto failure
-
 echo "Building protobuf RELEASE|x64"
-MSBuild.exe protobuf.sln /p:configuration=RELEASE /t:Clean;Build
+%CMAKE% --build . --config Release --parallel 8
 IF %ERRORLEVEL% NEQ 0 (
   echo "Error building protobuf RELEASE|x64!"
   goto failure
 )
-:: Work around for issue in 64-bit builds, FindProtobuf modules expects files in x64\Release
-copy Release\*.* x64\Release || goto failure
+:: Work around for issue in 64-bit builds, FindProtobuf expects files in x64\Release
+mkdir x64\Release 2>nul
+copy Release\*.* x64\Release\ || goto failure
 popd
 popd
 
-:: Compile the DEBUG|x64 and RELEASE|x64 builds of libusb
-pushd thirdparty\libusb\msvc\
-echo "Building libusb DEBUG|x64..."
-MSBuild.exe libusb_2015.sln /tv:14.0 /p:configuration=DEBUG /p:Platform="x64" /t:Clean;Build 
-IF %ERRORLEVEL% NEQ 0 (
-  echo "Error building libusb DEBUG|x64!"
-  goto failure
-)
+:: Compile the RELEASE|x64 build of libusb
+pushd thirdparty\libusb\msvc
 echo "Building libusb RELEASE|x64..."
-MSBuild.exe libusb_2015.sln /tv:14.0 /p:configuration=RELEASE /p:Platform="x64" /t:Clean;Build
+%MSBUILD% libusb_2015.sln -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:WindowsTargetPlatformVersion=10.0 -m
 IF %ERRORLEVEL% NEQ 0 (
   echo "Error building libusb RELEASE|x64!"
   goto failure
 )
 popd
 
-:: Compile the RELEASE|x64 build of SDL2
+:: Compile the RELEASE|x64 build of SDL2 (static)
 echo "Creating SDL2 project files..."
 pushd thirdparty\SDL2
 del /f /s /q build > nul
 rmdir /s /q build
 mkdir build
 pushd build
-cmake .. -G "Visual Studio 14 2015 Win64" -DDIRECTX=OFF -DDIRECTX=OFF -DSDL_STATIC=ON -DFORCE_STATIC_VCRT=ON -DEXTRA_CFLAGS="-MT -Z7 -DSDL_MAIN_HANDLED -DWIN32 -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -DHAVE_LIBC -D_USE_MATH_DEFINES
+%CMAKE% .. -G "Visual Studio 18 2026" -A x64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ^
+  -DDIRECTX=OFF -DSDL_STATIC=ON -DFORCE_STATIC_VCRT=ON ^
+  -DEXTRA_CFLAGS="-MT -Z7 -DSDL_MAIN_HANDLED -DWIN32 -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -DHAVE_LIBC -D_USE_MATH_DEFINES"
 IF %ERRORLEVEL% NEQ 0 (
   echo "Error generating SDL2 project files!"
   goto failure
 )
 
-echo "Building SDL2 Release|x64..."
-MSBuild.exe SDL2.sln /p:configuration=RELEASE /p:Platform="x64" /t:Clean
-IF %ERRORLEVEL% NEQ 0 (
-  echo "Error building SDL2 Release|x64!"
-  goto failure
-)
-MSBuild.exe SDL2-static.vcxproj /p:configuration=RELEASE /p:Platform="x64" /t:Build 
+echo "Building SDL2-static Release|x64..."
+%CMAKE% --build . --config Release --target SDL2-static -- -m
 IF %ERRORLEVEL% NEQ 0 (
   echo "Error building SDL2-static Release|x64!"
   goto failure
 )
-MSBuild.exe SDL2main.vcxproj /p:configuration=RELEASE /p:Platform="x64" /t:Build
+echo "Building SDL2main Release|x64..."
+%CMAKE% --build . --config Release --target SDL2main -- -m
 IF %ERRORLEVEL% NEQ 0 (
   echo "Error building SDL2main Release|x64!"
   goto failure
@@ -118,6 +105,14 @@ popd
 
 :: Generate the project files for PSMoveService
 call GenerateProjectFiles_X64.bat || goto failure
+
+:: Build PSMoveService (OpenCV builds automatically as a dependency)
+echo "Building PSMoveService Release|x64..."
+%CMAKE% --build build --config Release --parallel 8
+IF %ERRORLEVEL% NEQ 0 (
+  echo "Error building PSMoveService Release|x64!"
+  goto failure
+)
 EXIT /B 0
 
 :failure

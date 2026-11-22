@@ -51,18 +51,67 @@ docs
 # Local Scripts
 SetBuildVars.bat
 SetBuildVars_Win32.bat
-SetBuildVars_X64.bat
-
 
 # Allow source model files
 !/src/psmoveconfigtool/source_assets_old/**
 !/src/psmoveconfigtool/source_assets/**
 !/src/openvr_plugin/resources/**
 
+# =====================
+# Additional ignore rules for temporary and unnecessary files
+# =====================
+
+# IDE & editor swap / backup files
+*~
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# OS generated files
+Thumbs.db
+.DS_Store
+
+# Logs & output
+*.log
+*.out
+*.txt
+status_output.txt
+diff_output.txt
+
+# Build artefacts (just to be safe)
+build*/
+bin*/
+obj*/
+cmake*/
+CMakeCache.txt
+CMakeFiles/
+cmake_config.log
+cmake_ninja.log
+cmake_test.log
+cmake_v2.log
+cmake_v3.log
+cmake_v4.log
+cmake_vs2019.log
+
+# Third‑party dependencies that are not needed in source control
+thirdparty/
+deps/
+# Explicitly ignore the thirdparty root directory
+/thirdparty/
+# Also ignore any nested thirdparty directories just in case
+**/thirdparty/
+# Explicitly ignore all contents of thirdparty directories
+thirdparty/**
+# Ignore any .bat files that match the build vars pattern
+SetBuildVars_*.bat
+
 # Allow assets
 !/src/psmoveconfigtool/assets/**
 
 # Allow misc
 !/misc/**
+# Ignore compiled objects inside misc but keep the rest of misc tracked
+misc/**/obj*
 
 *.kdev4

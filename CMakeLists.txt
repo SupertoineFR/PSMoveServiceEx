@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.5)
+# The project and its bundled dependencies use legacy CMake compatibility.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 project(PSMoveService VERSION 0.0.1)
 include(ExternalProject)
 
