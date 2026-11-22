@@ -292,19 +292,21 @@ private:
     {
         bool success= true;
 
-		/** Make sure the shared memory directory exists (if non-default path is defined) */
-		#if defined(BOOST_INTERPROCESS_SHARED_DIR_PATH)
-		boost::filesystem::path shared_mem_dir(BOOST_INTERPROCESS_SHARED_DIR_PATH);
+		/** Make sure the shared memory directory exists (boost::interprocess does not create it when a custom folder is used) */
+		#if defined(BOOST_INTERPROCESS_SHARED_DIR_FUNC)
+		boost::filesystem::path shared_mem_dir(get_shared_memory_directory_wide());
 		boost::system::error_code ec;
-		if (!boost::filesystem::create_directory(shared_mem_dir, ec))
+		boost::filesystem::create_directories(shared_mem_dir, ec);
+		if (ec)
 		{
-			if(ec.value() != boost::interprocess::already_exists_error && ec.value() != boost::interprocess::no_error)
-			{
-				SERVER_LOG_FATAL("PSMoveServiceEx") << "Failed to create the shared memory directory: " << ec.message();
-				success= false;
-			}
+			SERVER_LOG_FATAL("PSMoveServiceEx") << "Failed to create the shared memory directory " << shared_mem_dir.string() << ": " << ec.message();
+			success= false;
 		}
-		#endif // BOOST_INTERPROCESS_SHARED_DIR_PATH       
+		else
+		{
+			SERVER_LOG_INFO("PSMoveServiceEx") << "Shared memory directory: " << shared_mem_dir.string();
+		}
+		#endif // BOOST_INTERPROCESS_SHARED_DIR_FUNC
 
         /** Setup the usb async transfer thread before we attempt to initialize the trackers */
         if (success)

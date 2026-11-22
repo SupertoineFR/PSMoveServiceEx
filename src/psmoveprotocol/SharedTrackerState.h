@@ -1,9 +1,8 @@
 #ifndef SHARED_TRACKER_STATE_H
 #define SHARED_TRACKER_STATE_H
 
-#ifdef WIN32
-#define BOOST_INTERPROCESS_SHARED_DIR_PATH "shared_mem"
-#endif // WIN32
+// Must come before any boost/interprocess include (sets the shared memory folder).
+#include "SharedMemoryPath.h"
 
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 
