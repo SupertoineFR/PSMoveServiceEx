@@ -2536,6 +2536,10 @@ pose_filter_factory(
 	{
 		orientation_filter_enum = OrientationFilterTypeExternal;
 	}
+	else if (orientation_filter_type == "OpticalYawARG")
+	{
+		orientation_filter_enum = OrientationFilterTypeOpticalYawARG;
+	}
     else
     {
         SERVER_LOG_INFO("pose_filter_factory()") << 
@@ -2866,6 +2870,8 @@ static void post_optical_filter_packet_for_psmove(
 				pose_estimation->position_cm.y,
 				pose_estimation->position_cm.z);
 		sensor_packet.tracking_projection_area_px_sqr= pose_estimation->projection.screen_area;
+		sensor_packet.optical_pair_count= pose_estimation->triangulation_pair_count;
+		sensor_packet.optical_tracker_mask= pose_estimation->triangulation_tracker_mask;
     }
 
 	pose_filter_queue->push_back(sensor_packet);
@@ -2962,6 +2968,8 @@ static void post_optical_filter_packet_for_ds4(
 				pose_estimation->position_cm.y,
 				pose_estimation->position_cm.z);
 		sensor_packet.tracking_projection_area_px_sqr= screen_area;
+		sensor_packet.optical_pair_count= pose_estimation->triangulation_pair_count;
+		sensor_packet.optical_tracker_mask= pose_estimation->triangulation_tracker_mask;
     }
 
 	pose_filter_queue->push_back(sensor_packet);
@@ -2991,6 +2999,8 @@ static void post_optical_filter_packet_for_virtual_controller(
 				pose_estimation->position_cm.y,
 				pose_estimation->position_cm.z);
 		sensor_packet.tracking_projection_area_px_sqr= pose_estimation->projection.screen_area;
+		sensor_packet.optical_pair_count= pose_estimation->triangulation_pair_count;
+		sensor_packet.optical_tracker_mask= pose_estimation->triangulation_tracker_mask;
     }
 
 	pose_filter_queue->push_back(sensor_packet);
@@ -3010,6 +3020,8 @@ static void computeSpherePoseForControllerFromSingleTracker(
     // Put the tracker relative position into world space
     multicam_pose_estimation->position_cm = tracker->computeWorldPosition(&tracker_pose_estimation->position_cm);
     multicam_pose_estimation->bCurrentlyTracking = true;
+    multicam_pose_estimation->triangulation_pair_count = 0;
+    multicam_pose_estimation->triangulation_tracker_mask = 0;
 
     // Copy over the screen projection area
     multicam_pose_estimation->projection.screen_area = tracker_pose_estimation->projection.screen_area;
@@ -3050,7 +3062,9 @@ static void computeLightBarPoseForControllerFromSingleTracker(
         // Put the tracker relative position into world space
         multicam_pose_estimation->position_cm = tracker->computeWorldPosition(&tracker_pose_estimation->position_cm);
         multicam_pose_estimation->bCurrentlyTracking = true;
-        
+        multicam_pose_estimation->triangulation_pair_count = 0;
+        multicam_pose_estimation->triangulation_tracker_mask = 0;
+
         // Copy over the screen projection area
         multicam_pose_estimation->projection.screen_area = tracker_pose_estimation->projection.screen_area;
     }
@@ -3106,6 +3120,7 @@ static void computeSpherePoseForControllerFromMultipleTrackers(
 	
 	// Compute triangulations amongst all pairs of projections
 	int pair_count = 0;
+	unsigned int pair_tracker_mask = 0;
 
 	struct projectionInfo
 	{
@@ -3225,6 +3240,8 @@ static void computeSpherePoseForControllerFromMultipleTrackers(
 
 			if (add_pair)
 			{
+				pair_tracker_mask |= (1u << tracker_id) | (1u << other_tracker_id);
+
 				// Do some runtime position caching to make transitions between cameras smoother.
 				// Give each camera an offset from the total average.
 				if (cfg.average_position_cache_enabled && !isTrackingEnforced)
@@ -3542,6 +3559,8 @@ static void computeSpherePoseForControllerFromMultipleTrackers(
 		// Store the averaged tracking position
 		multicam_pose_estimation->position_cm = average_world_position;
         multicam_pose_estimation->bCurrentlyTracking = true;
+        multicam_pose_estimation->triangulation_pair_count = pair_count;
+        multicam_pose_estimation->triangulation_tracker_mask = pair_tracker_mask;
     }
 
     // No orientation for the sphere projection
@@ -3569,6 +3588,7 @@ static void computeLightBarPoseForControllerFromMultipleTrackers(
 
     // Compute triangulations amongst all pairs of projections
     int pair_count = 0;
+    unsigned int pair_tracker_mask = 0;
     CommonDevicePosition average_world_position = { 0.f, 0.f, 0.f };
     for (int list_index = 0; list_index < projections_found; ++list_index)
     {
@@ -3607,6 +3627,7 @@ static void computeLightBarPoseForControllerFromMultipleTrackers(
             // Weight the quaternion base on how visible the controller is on each screen
             orientation_weights[pair_count] = projection.screen_area + other_projection.screen_area;
 
+            pair_tracker_mask |= (1u << tracker_id) | (1u << other_tracker_id);
             ++pair_count;
         }
     }
@@ -3624,6 +3645,8 @@ static void computeLightBarPoseForControllerFromMultipleTrackers(
         // Store the averaged tracking position
         multicam_pose_estimation->position_cm = average_world_position;
         multicam_pose_estimation->bCurrentlyTracking = true;
+        multicam_pose_estimation->triangulation_pair_count = pair_count;
+        multicam_pose_estimation->triangulation_tracker_mask = pair_tracker_mask;
     }
 
     // Compute the average orientation

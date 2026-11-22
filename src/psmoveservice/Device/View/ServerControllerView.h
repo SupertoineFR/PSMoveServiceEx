@@ -40,6 +40,11 @@ struct ControllerOpticalPoseEstimation
     CommonDeviceQuaternion orientation;
     bool bOrientationValid;
 
+	// How the position was produced: number of triangulated tracker pairs
+	// (0 = estimated from a single tracker) and a bit mask of the trackers used.
+	int triangulation_pair_count;
+	unsigned int triangulation_tracker_mask;
+
 	bool bEnforceNewROI;
 	bool bIsOccluded;
 	bool bIsBlacklisted;
@@ -58,6 +63,9 @@ struct ControllerOpticalPoseEstimation
 
         orientation.clear();
         bOrientationValid= false;
+
+		triangulation_pair_count = 0;
+		triangulation_tracker_mask = 0;
 
 		bEnforceNewROI = false;
 		bIsOccluded = false;

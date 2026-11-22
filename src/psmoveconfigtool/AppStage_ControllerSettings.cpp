@@ -195,7 +195,7 @@ const int k_default_ds4_orientation_filter_index = 2; // ComplementaryOpticalARG
 const int k_default_ds4_gyro_gain_index = 4; // 2000deg/s
 
 const char* k_controller_position_filter_names[] = { "PassThru", "LowPassOptical", "ComplimentaryOpticalIMU", "PositionKalman" , "PositionExternalAttachment" };
-const char* k_psmove_orientation_filter_names[] = { "PassThru", "MadgwickARG", "MadgwickMARG", "ComplementaryMARG", "ComplementaryOpticalARG", /*"OrientationTargetOpticalARG",*/ "OrientationExternal" };
+const char* k_psmove_orientation_filter_names[] = { "PassThru", "MadgwickARG", "MadgwickMARG", "ComplementaryMARG", "ComplementaryOpticalARG", /*"OrientationTargetOpticalARG",*/ "OrientationExternal", "OpticalYawARG" };
 const char* k_ds4_orientation_filter_names[] = { "PassThru", "MadgwickARG", "ComplementaryOpticalARG", "OrientationExternal" };
 const char* k_ds4_gyro_gain_setting_labels[] = { "125deg/s", "250deg/s", "500deg/s", "1000deg/s", "2000deg/s", "custom"};
 
@@ -1174,6 +1174,7 @@ void AppStage_ControllerSettings::renderUI()
 											if (controllerInfo.OrientationFilterName == "ComplementaryMARG" ||
 												controllerInfo.OrientationFilterName == "MadgwickMARG" ||
 												controllerInfo.OrientationFilterName == "MadgwickARG" ||
+												controllerInfo.OrientationFilterName == "OpticalYawARG" ||
 												controllerInfo.OrientationFilterName == "OrientationExternal" ||
 												controllerInfo.ControllerType == PSMController_Virtual)
 											{
@@ -1365,7 +1366,8 @@ void AppStage_ControllerSettings::renderUI()
 													ImGui::Unindent();
 												}
 											}
-											else if (controllerInfo.OrientationFilterName == "MadgwickMARG" || controllerInfo.OrientationFilterName == "MadgwickARG")
+											else if (controllerInfo.OrientationFilterName == "MadgwickMARG" || controllerInfo.OrientationFilterName == "MadgwickARG" ||
+													controllerInfo.OrientationFilterName == "OpticalYawARG")
 											{
 												settings_shown = true;
 
@@ -2750,6 +2752,17 @@ void AppStage_ControllerSettings::show_orientation_filter_tooltip(const std::str
 			"Requires calibration.\n"
 			"[Optical; Gyroscope]\n"
 			"(Use 'Calibrate Optical Noise' to calibrate)"
+		);
+	}
+	else if (name == "OpticalYawARG")
+	{
+		ImGui::SetTooltip(
+			"IMU orientation filter using madgwick, with yaw drift corrected optically.\n"
+			"Compares the controller motion seen by the trackers with the motion\n"
+			"measured by the accelerometer. Does not need a magnetometer.\n"
+			"Yaw is only corrected while the controller moves; works best with 2 or more trackers.\n"
+			"Tuning: FilterSettings.OpticalYaw in the controller's config file.\n"
+			"[Optical; Gyroscope; Accelerometer]"
 		);
 	}
 	else if (name == "OrientationExternal")

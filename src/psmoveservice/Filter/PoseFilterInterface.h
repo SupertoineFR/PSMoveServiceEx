@@ -63,6 +63,12 @@ struct PoseSensorPacket
     Eigen::Quaternionf optical_orientation;
 	float tracking_projection_area_px_sqr; // pixels^2
 
+	// How the optical position was produced:
+	// -1 = unknown, 0 = single tracker estimate, >0 = number of triangulated tracker pairs
+	int optical_pair_count;
+	// Bit mask of the trackers that contributed to the optical position (0 if unknown)
+	unsigned int optical_tracker_mask;
+
     // Sensor readings in the controller's reference frame
 	CommonRawDeviceVector raw_imu_accelerometer;
 	CommonRawDeviceVector raw_imu_magnetometer;
@@ -80,6 +86,8 @@ struct PoseSensorPacket
 		optical_position_cm= Eigen::Vector3f::Zero();
 		optical_orientation= Eigen::Quaternionf::Identity();
 		tracking_projection_area_px_sqr= 0.f;
+		optical_pair_count= -1;
+		optical_tracker_mask= 0;
 
 		raw_imu_accelerometer.clear();
 		raw_imu_magnetometer.clear();

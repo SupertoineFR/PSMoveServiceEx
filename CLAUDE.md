@@ -80,6 +80,17 @@ grep -E "error [A-Z]+[0-9]+" build_release.log | sort -u     # list errors, if a
 
 Debug builds of protobuf/libusb are only needed for `--config Debug`. Steps 1–3 only need redoing if their output folders are deleted.
 
+## Version bump
+
+- The release version lives only in `src/psmoveprotocol/ProtocolVersion.h`: `PSM_RELEASE_VERSION_{MAJOR,MINOR,BUILD,REVISION}`
+  (shown as `MAJOR.MINOR.BUILD.REVISION`, e.g. `0.28.0.0`). `cmake/Version.cmake` reads it from there, so re-run the
+  CMake configure step after changing it.
+- New feature update → bump MINOR and reset BUILD/REVISION to 0 (0.27.8 → 0.28.0); fixes → bump BUILD.
+- Leave the `PSM_PROTOCOL_VERSION_*` defines alone unless the client/service protocol itself changes.
+- Do **not** edit `updater/app_version.txt`, `app_hash.txt` or `PSMoveServiceUpdateSFX.dat` by hand. They are the live
+  auto-update feed and are regenerated together by `CreateUpdate.bat` when a release is packaged. Bumping
+  `app_version.txt` early would offer existing installs an update that doesn't exist yet.
+
 ## Running / debugging
 
 - The service logs to the console and to `PSMoveServiceEx.log` in its working directory.

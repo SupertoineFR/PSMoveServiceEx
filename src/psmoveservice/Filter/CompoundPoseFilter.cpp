@@ -93,6 +93,9 @@ void CompoundPoseFilter::allocate_filters(
 		m_orientation_filter = nullptr;
 #endif
 		break;
+	case OrientationFilterTypeOpticalYawARG:
+		m_orientation_filter = new OrientationFilterOpticalYawARG;
+		break;
 	case OrientationFilterTypeExternal:
 #if !defined(IS_TESTING_KALMAN)
 		m_orientation_filter = new OrientationFilterExternal;

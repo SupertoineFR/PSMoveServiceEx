@@ -94,6 +94,11 @@ public:
 		, filter_position_kalman_noise(300.f)
 		, filter_position_kalman_disable_cutoff(true)
 		, filter_madgwick_smart_correct(true)
+		, filter_optical_yaw_correction_time(2.0f)
+		, filter_optical_yaw_window(0.25f)
+		, filter_optical_yaw_min_velocity_change(25.f)
+		, filter_optical_yaw_latency(0.035f)
+		, filter_optical_yaw_use_single_tracker(false)
     {
         magnetometer_identity.clear();
         magnetometer_center.clear();
@@ -241,6 +246,13 @@ public:
 	float filter_madgwick_stabilization_min_beta;
 	float filter_madgwick_stabilization_smoothing_factor;
 	bool filter_madgwick_smart_correct;
+
+	// OpticalYawARG: yaw drift correction from the optical position track
+	float filter_optical_yaw_correction_time; // seconds, time constant of the yaw correction
+	float filter_optical_yaw_window; // seconds, span over which velocity changes are compared
+	float filter_optical_yaw_min_velocity_change; // cm/s, minimum horizontal velocity change to use a window
+	float filter_optical_yaw_latency; // seconds, how much later optical samples arrive than IMU samples
+	bool filter_optical_yaw_use_single_tracker; // also use positions estimated from a single tracker
 
 	float filter_velocity_smoothing_factor;
 	float filter_angular_smoothing_factor;

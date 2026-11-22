@@ -67,6 +67,8 @@ void PoseFilterSpace::createFilterPacket(
     outFilterPacket.optical_orientation = sensorPacket.optical_orientation;
     outFilterPacket.optical_position_cm = sensorPacket.optical_position_cm;
 	outFilterPacket.tracking_projection_area_px_sqr= sensorPacket.tracking_projection_area_px_sqr;
+	outFilterPacket.optical_pair_count= sensorPacket.optical_pair_count;
+	outFilterPacket.optical_tracker_mask= sensorPacket.optical_tracker_mask;
 
 	if (sensorPacket.has_gyroscope_measurement)
 	{

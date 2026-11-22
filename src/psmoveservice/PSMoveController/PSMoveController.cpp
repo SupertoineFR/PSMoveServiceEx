@@ -633,6 +633,12 @@ PSMoveControllerConfig::config2ptree()
 	pt.put("FilterSettings.Madgwick.StabilizationSmoothingFactor", filter_madgwick_stabilization_smoothing_factor);
 	pt.put("FilterSettings.Madgwick.SmartEnabled", filter_madgwick_smart_correct);
 
+	pt.put("FilterSettings.OpticalYaw.CorrectionTime", filter_optical_yaw_correction_time);
+	pt.put("FilterSettings.OpticalYaw.Window", filter_optical_yaw_window);
+	pt.put("FilterSettings.OpticalYaw.MinVelocityChange", filter_optical_yaw_min_velocity_change);
+	pt.put("FilterSettings.OpticalYaw.Latency", filter_optical_yaw_latency);
+	pt.put("FilterSettings.OpticalYaw.UseSingleTracker", filter_optical_yaw_use_single_tracker);
+
 	pt.put("FilterSettings.VelocitySmoothingFactor", filter_velocity_smoothing_factor);
 	pt.put("FilterSettings.AngularSmoothingFactor", filter_angular_smoothing_factor);
 	pt.put("FilterSettings.VelocityPredictionCutoff", filter_velocity_prediction_cutoff);
@@ -773,6 +779,12 @@ PSMoveControllerConfig::ptree2config(const boost::property_tree::ptree &pt)
 		filter_madgwick_stabilization_min_beta = pt.get<float>("FilterSettings.Madgwick.StabilizationMinBeta", filter_madgwick_stabilization_min_beta);
 		filter_madgwick_stabilization_smoothing_factor = pt.get<float>("FilterSettings.Madgwick.StabilizationSmoothingFactor", filter_madgwick_stabilization_smoothing_factor);
 		filter_madgwick_smart_correct = pt.get<bool>("FilterSettings.Madgwick.SmartEnabled", filter_madgwick_smart_correct);
+
+		filter_optical_yaw_correction_time = pt.get<float>("FilterSettings.OpticalYaw.CorrectionTime", filter_optical_yaw_correction_time);
+		filter_optical_yaw_window = pt.get<float>("FilterSettings.OpticalYaw.Window", filter_optical_yaw_window);
+		filter_optical_yaw_min_velocity_change = pt.get<float>("FilterSettings.OpticalYaw.MinVelocityChange", filter_optical_yaw_min_velocity_change);
+		filter_optical_yaw_latency = pt.get<float>("FilterSettings.OpticalYaw.Latency", filter_optical_yaw_latency);
+		filter_optical_yaw_use_single_tracker = pt.get<bool>("FilterSettings.OpticalYaw.UseSingleTracker", filter_optical_yaw_use_single_tracker);
 
 		filter_velocity_smoothing_factor = pt.get<float>("FilterSettings.VelocitySmoothingFactor", filter_velocity_smoothing_factor);
 		filter_angular_smoothing_factor = pt.get<float>("FilterSettings.AngularSmoothingFactor", filter_angular_smoothing_factor);

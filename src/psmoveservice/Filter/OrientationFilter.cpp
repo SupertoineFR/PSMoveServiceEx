@@ -2,6 +2,8 @@
 #include "OrientationFilter.h"
 #include "MathAlignment.h"
 #include "ServerLog.h"
+#include <algorithm>
+#include <cmath>
 #include <deque>
 
 //-- constants -----
@@ -1591,4 +1593,442 @@ void OrientationFilterComplementaryMARG::filter_process_stabilization(
 	// Update the blend weight
 	// -- Exponential blend the MG weight from 1 down to k_base_earth_frame_align_weight
 	mg_weight = lerp_clampf(mg_weight, align_weight, 0.9f);
+}
+
+// -- OrientationFilterOpticalYawARG --
+// Defaults for devices without OpticalYaw settings (anything but a PSMove)
+#define k_optical_yaw_default_correction_time 2.0f // s
+#define k_optical_yaw_default_window 0.25f // s
+#define k_optical_yaw_default_min_velocity_change 25.f // cm/s
+#define k_optical_yaw_default_latency 0.035f // s
+// Span of the optical velocity line fit at each end of a comparison window
+#define k_optical_yaw_velocity_fit_time 0.05 // s
+// Minimum optical samples in one velocity fit
+#define k_optical_yaw_min_fit_samples 3
+// A gap longer than this in either sample stream starts a new history
+#define k_optical_yaw_max_sample_gap 0.1 // s
+// How much IMU history is kept (must cover window + fit time + latency)
+#define k_optical_yaw_imu_history_time 2.0 // s
+// When the set of trackers changes, the history is kept only if the position
+// continues within this distance of where its current velocity predicts
+#define k_optical_yaw_max_tracker_switch_jump 1.5f // cm
+// Accepted ratio between the IMU and optical velocity change magnitudes
+#define k_optical_yaw_max_magnitude_ratio 2.0f
+// Max weight of a single window, in units of (min velocity change)^2
+#define k_optical_yaw_max_window_weight 10.f
+// Accumulated weight needed before corrections are applied
+#define k_optical_yaw_min_confidence 5.f
+// Fastest the yaw is turned, so a correction is never a visible snap
+#define k_optical_yaw_max_correction_rate (90.f * k_degrees_to_radians) // rad/s
+// Re-base the integrated IMU velocity when it grows this large (float precision)
+#define k_optical_yaw_velocity_rebase_limit 10000.f // cm/s
+
+static double timepoint_to_seconds(const t_high_resolution_timepoint timestamp)
+{
+	return std::chrono::duration<double>(timestamp.time_since_epoch()).count();
+}
+
+static Eigen::Vector3f remove_vertical_component(const Eigen::Vector3f &v, const Eigen::Vector3f &up)
+{
+	return v - up * up.dot(v);
+}
+
+OrientationFilterOpticalYawARG::OrientationFilterOpticalYawARG()
+	: OrientationFilterMadgwickARG()
+{
+	clearOpticalYawState();
+}
+
+void OrientationFilterOpticalYawARG::resetState()
+{
+	OrientationFilterMadgwickARG::resetState();
+	clearOpticalYawState();
+}
+
+void OrientationFilterOpticalYawARG::clearOpticalYawState()
+{
+	m_imuVelocityHistory.clear();
+	m_opticalHistory.clear();
+	m_imuVelocity = Eigen::Vector3f::Zero();
+	m_lastImuAcceleration = Eigen::Vector3f::Zero();
+	m_lastImuTime = -1.0;
+	m_lastOpticalTime = -1.0;
+	m_lastYawUpdateTime = -1.0;
+	m_lastOpticalPairCount = -1;
+	m_lastOpticalTrackerMask = 0;
+	m_yawSumDot = 0.f;
+	m_yawSumCross = 0.f;
+}
+
+OrientationFilterOpticalYawARG::Settings OrientationFilterOpticalYawARG::readSettings(const PoseFilterPacket &packet) const
+{
+	Settings settings;
+	settings.correction_time = k_optical_yaw_default_correction_time;
+	settings.window = k_optical_yaw_default_window;
+	settings.min_velocity_change = k_optical_yaw_default_min_velocity_change;
+	settings.latency = k_optical_yaw_default_latency;
+	settings.use_single_tracker = false;
+
+#if !defined(IS_TESTING_KALMAN)
+	if (packet.controllerDeviceId > -1)
+	{
+		ServerControllerViewPtr ControllerView = DeviceManager::getInstance()->getControllerViewPtr(packet.controllerDeviceId);
+		if (ControllerView != nullptr && ControllerView->getIsOpen() &&
+			ControllerView->getControllerDeviceType() == CommonDeviceState::PSMove)
+		{
+			const PSMoveControllerConfig *config = ControllerView->castChecked<PSMoveController>()->getConfig();
+
+			settings.correction_time = config->filter_optical_yaw_correction_time;
+			settings.window = config->filter_optical_yaw_window;
+			settings.min_velocity_change = config->filter_optical_yaw_min_velocity_change;
+			settings.latency = config->filter_optical_yaw_latency;
+			settings.use_single_tracker = config->filter_optical_yaw_use_single_tracker;
+		}
+	}
+#endif
+
+	// Clamp everything to safety
+	settings.correction_time = clampf(settings.correction_time, 0.05f, 60.f);
+	settings.window = clampf(settings.window, 0.1f, 1.0f);
+	settings.min_velocity_change = clampf(settings.min_velocity_change, 1.f, 500.f);
+	settings.latency = clampf(settings.latency, 0.f, 0.2f);
+
+	return settings;
+}
+
+Eigen::Vector3f OrientationFilterOpticalYawARG::getUpDirection() const
+{
+	// The accelerometer reads "up" at rest, so the identity pose gravity reading is the world up direction
+	const Eigen::Vector3f up = m_constants.gravity_calibration_direction;
+	if (up.squaredNorm() < k_real_epsilon)
+	{
+		return Eigen::Vector3f::UnitY();
+	}
+
+	return up.normalized();
+}
+
+void OrientationFilterOpticalYawARG::update(
+	const t_high_resolution_timepoint timestamp,
+	const PoseFilterPacket &packet)
+{
+	const double time = timepoint_to_seconds(timestamp);
+
+	// Integrate the world-frame acceleration with the orientation the sample was taken in,
+	// before the Madgwick step moves it forward
+	if (packet.has_accelerometer_measurement && m_state->bIsValid)
+	{
+		processImu(time, packet);
+	}
+
+	// Gyro integration + gravity correction of pitch/roll
+	OrientationFilterMadgwickARG::update(timestamp, packet);
+
+	// Yaw correction from the optical position track
+	if (packet.has_optical_measurement() && m_state->bIsValid)
+	{
+		processOptical(time, packet, readSettings(packet));
+	}
+}
+
+void OrientationFilterOpticalYawARG::processImu(const double time, const PoseFilterPacket &packet)
+{
+	const Eigen::Vector3f up = getUpDirection();
+
+	// The orientation maps sensor frame -> world frame.
+	// Only the horizontal part is kept: gravity drops out and yaw is all we are after.
+	const Eigen::Vector3f world_accelerometer = m_state->orientation._transformVector(packet.imu_accelerometer_g_units);
+	const Eigen::Vector3f horizontal_acceleration = remove_vertical_component(world_accelerometer, up) * k_g_units_to_gal;
+
+	if (m_lastImuTime < 0.0 || time - m_lastImuTime > k_optical_yaw_max_sample_gap)
+	{
+		// Start a new continuous history
+		m_imuVelocityHistory.clear();
+		m_imuVelocity = Eigen::Vector3f::Zero();
+	}
+	else if (time <= m_lastImuTime)
+	{
+		// Out of order sample
+		return;
+	}
+	else
+	{
+		// Trapezoid integration of the horizontal acceleration
+		const float dt = static_cast<float>(time - m_lastImuTime);
+		m_imuVelocity += 0.5f * (m_lastImuAcceleration + horizontal_acceleration) * dt;
+	}
+
+	m_lastImuAcceleration = horizontal_acceleration;
+	m_lastImuTime = time;
+
+	// Only differences of the integral are used, so it can be re-based when it grows large
+	if (m_imuVelocity.squaredNorm() > k_optical_yaw_velocity_rebase_limit * k_optical_yaw_velocity_rebase_limit)
+	{
+		for (TimedVector &sample : m_imuVelocityHistory)
+		{
+			sample.x -= m_imuVelocity.x();
+			sample.y -= m_imuVelocity.y();
+			sample.z -= m_imuVelocity.z();
+		}
+		m_imuVelocity = Eigen::Vector3f::Zero();
+	}
+
+	m_imuVelocityHistory.push_back({ time, m_imuVelocity.x(), m_imuVelocity.y(), m_imuVelocity.z() });
+
+	while (!m_imuVelocityHistory.empty() && m_imuVelocityHistory.front().time < time - k_optical_yaw_imu_history_time)
+	{
+		m_imuVelocityHistory.pop_front();
+	}
+}
+
+bool OrientationFilterOpticalYawARG::lookupImuVelocity(const double time, Eigen::Vector3f &out_velocity) const
+{
+	if (m_imuVelocityHistory.size() < 2 ||
+		time < m_imuVelocityHistory.front().time ||
+		time > m_imuVelocityHistory.back().time)
+	{
+		return false;
+	}
+
+	auto after = std::lower_bound(
+		m_imuVelocityHistory.begin(), m_imuVelocityHistory.end(), time,
+		[](const TimedVector &sample, const double t) { return sample.time < t; });
+	if (after == m_imuVelocityHistory.begin())
+	{
+		out_velocity = Eigen::Vector3f(after->x, after->y, after->z);
+		return true;
+	}
+
+	auto before = after - 1;
+	const double span = after->time - before->time;
+	const float u = (span > 0.0) ? static_cast<float>((time - before->time) / span) : 0.f;
+
+	out_velocity = Eigen::Vector3f(
+		before->x + (after->x - before->x) * u,
+		before->y + (after->y - before->y) * u,
+		before->z + (after->z - before->z) * u);
+	return true;
+}
+
+bool OrientationFilterOpticalYawARG::fitOpticalVelocity(
+	const double t_begin, const double t_end,
+	Eigen::Vector3f &out_velocity, double &out_center_time) const
+{
+	// Least squares line fit p(t) = p_mean + v * (t - t_mean) over the samples in [t_begin, t_end]
+	int count = 0;
+	double time_sum = 0.0;
+	Eigen::Vector3d position_sum = Eigen::Vector3d::Zero();
+
+	for (const TimedVector &sample : m_opticalHistory)
+	{
+		if (sample.time >= t_begin && sample.time <= t_end)
+		{
+			++count;
+			time_sum += sample.time;
+			position_sum += Eigen::Vector3d(sample.x, sample.y, sample.z);
+		}
+	}
+
+	if (count < k_optical_yaw_min_fit_samples)
+	{
+		return false;
+	}
+
+	const double time_mean = time_sum / count;
+	const Eigen::Vector3d position_mean = position_sum / count;
+
+	double time_variance = 0.0;
+	Eigen::Vector3d covariance = Eigen::Vector3d::Zero();
+	for (const TimedVector &sample : m_opticalHistory)
+	{
+		if (sample.time >= t_begin && sample.time <= t_end)
+		{
+			const double dt = sample.time - time_mean;
+			time_variance += dt * dt;
+			covariance += dt * (Eigen::Vector3d(sample.x, sample.y, sample.z) - position_mean);
+		}
+	}
+
+	if (time_variance < 1e-9)
+	{
+		return false;
+	}
+
+	out_velocity = (covariance / time_variance).cast<float>();
+	out_center_time = time_mean;
+	return true;
+}
+
+void OrientationFilterOpticalYawARG::processOptical(
+	const double time,
+	const PoseFilterPacket &packet,
+	const Settings &settings)
+{
+	const Eigen::Vector3f up = getUpDirection();
+	const double fit_time = k_optical_yaw_velocity_fit_time;
+
+	// Time since the last optical update, used for decay and correction rate
+	float update_dt = 0.f;
+	if (m_lastYawUpdateTime >= 0.0 && time > m_lastYawUpdateTime)
+	{
+		update_dt = static_cast<float>(time - m_lastYawUpdateTime);
+	}
+	if (time > m_lastYawUpdateTime)
+	{
+		m_lastYawUpdateTime = time;
+	}
+
+	// Old evidence fades: the gyro keeps drifting after it was measured
+	if (update_dt > 0.f)
+	{
+		const float decay = expf(-update_dt / settings.correction_time);
+		m_yawSumDot *= decay;
+		m_yawSumCross *= decay;
+	}
+
+	// -- Collect the optical sample --
+	const bool is_single_tracker = (packet.optical_pair_count == 0);
+	if (is_single_tracker && !settings.use_single_tracker)
+	{
+		// Single tracker depth is too noisy to compare against
+		m_opticalHistory.clear();
+		m_lastOpticalTime = -1.0;
+		return;
+	}
+
+	if (m_lastOpticalTime >= 0.0 && time <= m_lastOpticalTime)
+	{
+		// Out of order sample
+		return;
+	}
+
+	// The sphere is not at the IMU: move the optical position to where the IMU is,
+	// otherwise rotations show up as linear motion the accelerometer never felt
+	Eigen::Vector3f position = packet.optical_position_cm;
+	if (m_constants.tracking_shape.shape_type == eCommonTrackingShapeType::Sphere)
+	{
+		const CommonDevicePosition &offset = m_constants.tracking_shape.shape.sphere.center_cm;
+		position -= m_state->orientation._transformVector(Eigen::Vector3f(offset.x, offset.y, offset.z));
+	}
+
+	bool start_new_history = (m_lastOpticalTime < 0.0 || time - m_lastOpticalTime > k_optical_yaw_max_sample_gap);
+
+	if (!start_new_history &&
+		(packet.optical_pair_count != m_lastOpticalPairCount || packet.optical_tracker_mask != m_lastOpticalTrackerMask))
+	{
+		// The set of trackers changed, which can make the averaged position jump.
+		// Keep the history only if the position continues where its velocity predicts.
+		Eigen::Vector3f velocity;
+		double center_time;
+		start_new_history = true;
+
+		if (!m_opticalHistory.empty() &&
+			fitOpticalVelocity(m_lastOpticalTime - fit_time, m_lastOpticalTime, velocity, center_time))
+		{
+			const TimedVector &last = m_opticalHistory.back();
+			const Eigen::Vector3f predicted =
+				Eigen::Vector3f(last.x, last.y, last.z) + velocity * static_cast<float>(time - last.time);
+
+			start_new_history = (position - predicted).norm() > k_optical_yaw_max_tracker_switch_jump;
+		}
+	}
+
+	if (start_new_history)
+	{
+		m_opticalHistory.clear();
+	}
+
+	m_opticalHistory.push_back({ time, position.x(), position.y(), position.z() });
+	m_lastOpticalTime = time;
+	m_lastOpticalPairCount = packet.optical_pair_count;
+	m_lastOpticalTrackerMask = packet.optical_tracker_mask;
+
+	while (!m_opticalHistory.empty() && m_opticalHistory.front().time < time - (settings.window + 2.0 * fit_time + 0.1))
+	{
+		m_opticalHistory.pop_front();
+	}
+
+	// -- Compare the velocity change over the window --
+	Eigen::Vector3f optical_end_velocity, optical_start_velocity;
+	double end_center_time, start_center_time;
+
+	if (fitOpticalVelocity(time - fit_time, time, optical_end_velocity, end_center_time) &&
+		fitOpticalVelocity(
+			end_center_time - settings.window - 0.5 * fit_time,
+			end_center_time - settings.window + 0.5 * fit_time,
+			optical_start_velocity, start_center_time) &&
+		(end_center_time - start_center_time) > 0.5 * settings.window)
+	{
+		// Optical samples arrive later than the IMU samples of the same moment
+		Eigen::Vector3f imu_end_velocity, imu_start_velocity;
+
+		if (lookupImuVelocity(end_center_time - settings.latency, imu_end_velocity) &&
+			lookupImuVelocity(start_center_time - settings.latency, imu_start_velocity))
+		{
+			const Eigen::Vector3f imu_delta = remove_vertical_component(imu_end_velocity - imu_start_velocity, up);
+			const Eigen::Vector3f optical_delta = remove_vertical_component(optical_end_velocity - optical_start_velocity, up);
+			const float imu_magnitude = imu_delta.norm();
+			const float optical_magnitude = optical_delta.norm();
+
+			// Need clear horizontal motion, and both sensors must agree on how much
+			// (a yaw error rotates the motion, it does not change its size)
+			if (optical_magnitude >= settings.min_velocity_change &&
+				imu_magnitude * k_optical_yaw_max_magnitude_ratio >= optical_magnitude &&
+				optical_magnitude * k_optical_yaw_max_magnitude_ratio >= imu_magnitude)
+			{
+				const float magnitude_product = imu_magnitude * optical_magnitude;
+				const float weight = fminf(
+					magnitude_product / (settings.min_velocity_change * settings.min_velocity_change),
+					k_optical_yaw_max_window_weight);
+
+				// Angle from the IMU motion to the optical motion, about the up axis
+				m_yawSumDot += weight * imu_delta.dot(optical_delta) / magnitude_product;
+				m_yawSumCross += weight * up.dot(imu_delta.cross(optical_delta)) / magnitude_product;
+			}
+		}
+	}
+
+	// -- Correct the yaw --
+	const float confidence = sqrtf(m_yawSumDot * m_yawSumDot + m_yawSumCross * m_yawSumCross);
+	if (confidence >= k_optical_yaw_min_confidence && update_dt > 0.f)
+	{
+		const float step_dt = fminf(update_dt, static_cast<float>(k_optical_yaw_max_sample_gap));
+		const float yaw_error = atan2f(m_yawSumCross, m_yawSumDot);
+		const float max_step = k_optical_yaw_max_correction_rate * step_dt;
+		const float step = clampf(yaw_error * clampf01(step_dt / settings.correction_time), -max_step, max_step);
+
+		applyYawCorrection(step);
+
+		// The accumulated evidence was measured before this correction: rotate it along
+		const float cos_step = cosf(step);
+		const float sin_step = sinf(step);
+		const float sum_dot = m_yawSumDot * cos_step + m_yawSumCross * sin_step;
+		const float sum_cross = m_yawSumCross * cos_step - m_yawSumDot * sin_step;
+		m_yawSumDot = sum_dot;
+		m_yawSumCross = sum_cross;
+	}
+}
+
+void OrientationFilterOpticalYawARG::applyYawCorrection(const float angle_radians)
+{
+	if (!std::isfinite(angle_radians) || fabsf(angle_radians) < k_real_epsilon)
+	{
+		return;
+	}
+
+	// A world-frame rotation about the up axis only changes yaw
+	const Eigen::Quaternionf yaw_rotation(Eigen::AngleAxisf(angle_radians, getUpDirection()));
+	const Eigen::Quaternionf new_orientation = (yaw_rotation * m_state->orientation).normalized();
+
+	if (!eigen_quaternion_is_valid(new_orientation))
+	{
+		return;
+	}
+
+	m_state->orientation = new_orientation;
+	m_smartOrientation = new_orientation;
+
+	// Keep the interpolation history in the same frame so the output does not jitter
+	m_interpolationState->last_orientation = (yaw_rotation * m_interpolationState->last_orientation).normalized();
+	m_interpolationState->previous_orientation = (yaw_rotation * m_interpolationState->previous_orientation).normalized();
 }

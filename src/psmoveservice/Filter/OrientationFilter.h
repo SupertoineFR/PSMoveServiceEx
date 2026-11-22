@@ -4,6 +4,8 @@
 //-- includes -----
 #include "PoseFilterInterface.h"
 
+#include <deque>
+
 #if !defined(IS_TESTING_KALMAN)
 #include "DeviceManager.h" 
 #include "ControllerManager.h"
@@ -153,6 +155,58 @@ class OrientationFilterComplementaryOpticalARG : public OrientationFilterMadgwic
 {
 public:
     void update(const t_high_resolution_timepoint timestamp, const PoseFilterPacket &packet) override;
+};
+
+/// Angular Rate and Gravity fusion (Madgwick) with optical yaw drift correction.
+/// Yaw is not observable from a single tracked point, but it is observable from motion:
+/// the IMU's world-frame horizontal velocity change (accelerometer rotated by the current orientation)
+/// must match the one measured by the optical (triangulated) position track.
+/// The rotation between the two about the vertical axis is the yaw error, which is slowly corrected.
+/// Replaces the magnetometer for yaw, so it works on controllers without one.
+class OrientationFilterOpticalYawARG : public OrientationFilterMadgwickARG
+{
+public:
+	OrientationFilterOpticalYawARG();
+
+	void resetState() override;
+	void update(const t_high_resolution_timepoint timestamp, const PoseFilterPacket &packet) override;
+
+	struct Settings
+	{
+		float correction_time; // seconds
+		float window; // seconds
+		float min_velocity_change; // cm/s
+		float latency; // seconds
+		bool use_single_tracker;
+	};
+
+protected:
+	struct TimedVector
+	{
+		double time; // seconds
+		float x, y, z;
+	};
+
+	Settings readSettings(const PoseFilterPacket &packet) const;
+	Eigen::Vector3f getUpDirection() const;
+	void processImu(const double time, const PoseFilterPacket &packet);
+	void processOptical(const double time, const PoseFilterPacket &packet, const Settings &settings);
+	bool fitOpticalVelocity(const double t_begin, const double t_end, Eigen::Vector3f &out_velocity, double &out_center_time) const;
+	bool lookupImuVelocity(const double time, Eigen::Vector3f &out_velocity) const;
+	void applyYawCorrection(const float angle_radians);
+	void clearOpticalYawState();
+
+	std::deque<TimedVector> m_imuVelocityHistory; // integrated horizontal IMU velocity, cm/s
+	std::deque<TimedVector> m_opticalHistory; // IMU-centered optical positions, cm
+	Eigen::Vector3f m_imuVelocity; // cm/s
+	Eigen::Vector3f m_lastImuAcceleration; // cm/s^2
+	double m_lastImuTime;
+	double m_lastOpticalTime;
+	double m_lastYawUpdateTime;
+	int m_lastOpticalPairCount;
+	unsigned int m_lastOpticalTrackerMask;
+	float m_yawSumDot;
+	float m_yawSumCross;
 };
 
 #endif // ORIENTATION_FILTER_H
