@@ -23,5 +23,28 @@ include(cmake/Installer.cmake)
 # Step into the subdirectories
 add_subdirectory(src)
 
+# Stage a ready-to-run folder with the service, the config tool and the client DLL side by side,
+# laid out like the release package (same layout as CreateRelease.bat, without the zip and test binaries).
+#   cmake --build build --config Release --target stage_release
+# Output: <repo>/release/PSMoveService
+IF(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+    set(PSM_STAGE_DIR "${ROOT_DIR}/release/PSMoveService")
+    add_custom_target(stage_release
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PSM_STAGE_DIR}/assets/calibration"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:PSMoveService>
+            $<TARGET_FILE:PSMoveServiceAdmin>
+            $<TARGET_FILE:PSMoveConfigTool>
+            $<TARGET_FILE:PSMoveClient_CAPI>
+            "${PSM_STAGE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${ROOT_DIR}/src/psmoveconfigtool/assets" "${PSM_STAGE_DIR}/assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${ROOT_DIR}/misc/calibration" "${PSM_STAGE_DIR}/assets/calibration"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ROOT_DIR}/LICENSE" "${PSM_STAGE_DIR}/LICENSE.txt"
+        COMMAND ${CMAKE_COMMAND} -E echo "Staged PSMoveService in ${PSM_STAGE_DIR}"
+        COMMENT "Staging PSMoveService release folder"
+        VERBATIM)
+    add_dependencies(stage_release PSMoveService PSMoveServiceAdmin PSMoveConfigTool PSMoveClient_CAPI)
+ENDIF()
+
 # TODO: Move tests to root-level
 # TODO: CMakeLists for misc (matlab, python)
